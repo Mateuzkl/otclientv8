@@ -50,7 +50,7 @@ namespace Proto {
         GameServerLoginAdvice               = 21,
         GameServerLoginWait                 = 22,
         GameServerLoginSuccess              = 23,
-        GameServerLoginToken                = 24,
+        GameServerSessionEnd                = 24,
         GameServerStoreButtonIndicators     = 25, // 1097
         GameServerPingBack                  = 29,
         GameServerPing                      = 30,
@@ -114,7 +114,7 @@ namespace Proto {
         GameServerGraphicalEffect           = 131,
         GameServerTextEffect                = 132,
         GameServerMissleEffect              = 133,
-        GameServerMarkCreature              = 134,
+        GameServerItemClasses               = 134,
         GameServerTrappers                  = 135,
         GameServerCreatureHealth            = 140,
         GameServerCreatureLight             = 141,
@@ -183,6 +183,7 @@ namespace Proto {
         GameServerCoinBalance               = 223,
         GameServerStoreError                = 224, // 1080
         GameServerRequestPurchaseData       = 225, // 1080
+        GameServerWorldTime                = 239, // 1281
         GameServerOpenRewardWall            = 226,
         GameServerDailyReward               = 228,
         GameServerDailyRewardHistory        = 229,
@@ -195,22 +196,22 @@ namespace Proto {
         GameServerCloseImbuementWindow      = 236,
         GameServerMessageDialog             = 237,
         GameServerResourceBalance           = 238,
-        GameServerTime                      = 239,
-        GameServerQuestLog                  = 240,
-        GameServerQuestLine                 = 241,
-        GameServerCoinBalanceUpdate         = 242,
-        GameServerChannelEvent              = 243, // 910
-        GameServerItemInfo                  = 244, // 910
-        GameServerPlayerInventory           = 245, // 910
-        GameServerMarketEnter               = 246, // 944
-        GameServerMarketLeave               = 247, // 944
-        GameServerMarketDetail              = 248, // 944
-        GameServerMarketBrowse              = 249, // 944
-        GameServerModalDialog               = 250, // 960
-        GameServerStore                     = 251, // 1080
-        GameServerStoreOffers               = 252, // 1080
-        GameServerStoreTransactionHistory   = 253, // 1080
-        GameServerStoreCompletePurchase     = 254  // 1080
+        GameServerTime                      = 240,
+        GameServerQuestLog                  = 241,
+        GameServerQuestLine                 = 242,
+        GameServerCoinBalanceUpdate         = 243,
+        GameServerChannelEvent              = 244, // 910
+        GameServerItemInfo                  = 245, // 910
+        GameServerPlayerInventory           = 246, // 910
+        GameServerMarketEnter               = 247, // 944
+        GameServerMarketLeave               = 248, // 944
+        GameServerMarketDetail              = 249, // 944
+        GameServerMarketBrowse              = 250, // 944
+        GameServerModalDialog               = 251, // 960
+        GameServerStore                     = 252, // 1080
+        GameServerStoreOffers               = 253, // 1080
+        GameServerStoreTransactionHistory   = 254, // 1080
+        GameServerStoreCompletePurchase     = 255  // 1080
     };
 
     enum ClientOpcodes : uint8
@@ -341,6 +342,7 @@ namespace Proto {
         CreatureTypeNpc,
         CreatureTypeSummonOwn,
         CreatureTypeSummonOther,
+        CreatureTypeHidden,
         CreatureTypeUnknown = 0xFF
     };
 

@@ -80,7 +80,7 @@ protected:
     void processLoginError(const std::string& error);
     void processLoginAdvice(const std::string& message);
     void processLoginWait(const std::string& message, int time);
-    void processLoginToken(bool unknown);
+    void processSessionEnd(int reason);
     void processLogin();
     void processPendingGame();
     void processEnterGame();

@@ -100,8 +100,8 @@ void ProtocolGame::parseMessage(const InputMessagePtr& msg)
             case Proto::GameServerLoginWait:
                 parseLoginWait(msg);
                 break;
-            case Proto::GameServerLoginToken:
-                parseLoginToken(msg);
+            case Proto::GameServerSessionEnd:
+                parseSessionEnd(msg);
                 break;
             case Proto::GameServerPing:
             case Proto::GameServerPingBack:
@@ -201,8 +201,8 @@ void ProtocolGame::parseMessage(const InputMessagePtr& msg)
             case Proto::GameServerMissleEffect:
                 parseDistanceMissile(msg);
                 break;
-            case Proto::GameServerMarkCreature:
-                parseCreatureMark(msg);
+            case Proto::GameServerItemClasses:
+                parseItemClasses(msg);
                 break;
             case Proto::GameServerTrappers:
                 parseTrappers(msg);
@@ -392,6 +392,9 @@ void ProtocolGame::parseMessage(const InputMessagePtr& msg)
                 break;
             case Proto::GameServerRequestPurchaseData:
                 parseRequestPurchaseData(msg);
+                break;
+            case Proto::GameServerWorldTime:
+                parseWorldTime(msg);
                 break;
             case Proto::GameServerStoreCompletePurchase:
                 parseCompleteStorePurchase(msg);
@@ -622,6 +625,11 @@ void ProtocolGame::parseLogin(const InputMessagePtr& msg)
         }
     }
 
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU8(); // exiva button enabled (bool)
+        msg->getU8(); // Tournament button (bool)
+    }
+
     m_localPlayer->setId(playerId);
     g_game.setServerBeat(serverBeat);
     g_game.setCanReportBugs(canReportBugs);
@@ -682,6 +690,12 @@ void ProtocolGame::parseRequestPurchaseData(const InputMessagePtr& msg)
 {
     /*int transactionId = */msg->getU32();
     /*int productType = */msg->getU8();
+}
+
+void ProtocolGame::parseWorldTime(const InputMessagePtr& msg)
+{
+    msg->getU8(); // hour
+    msg->getU8(); // min
 }
 
 void ProtocolGame::parseStore(const InputMessagePtr& msg)
@@ -1016,14 +1030,13 @@ void ProtocolGame::parseLoginWait(const InputMessagePtr& msg)
 {
     std::string message = msg->getString();
     int time = msg->getU8();
-
     g_game.processLoginWait(message, time);
 }
 
-void ProtocolGame::parseLoginToken(const InputMessagePtr& msg)
+void ProtocolGame::parseSessionEnd(const InputMessagePtr& msg)
 {
-    bool unknown = (msg->getU8() == 0);
-    g_game.processLoginToken(unknown);
+    int reason = msg->getU8();
+    g_game.processSessionEnd(reason);
 }
 
 void ProtocolGame::parsePing(const InputMessagePtr& msg)
@@ -1064,6 +1077,10 @@ void ProtocolGame::parseDeath(const InputMessagePtr& msg)
 
     if (g_game.getFeature(Otc::GameTibia12Protocol))
         msg->getU8(); // death redemption
+
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU8(); // can use death redemption (bool)
+    }
 
     g_game.processDeath(deathType, penality);
 }
@@ -1257,7 +1274,7 @@ void ProtocolGame::parseOpenContainer(const InputMessagePtr& msg)
 {
     int containerId = msg->getU8();
     ItemPtr containerItem = getItem(msg);
-    std::string name = msg->getString();
+    const std::string& name = msg->getString();
     int capacity = msg->getU8();
     bool hasParent = (msg->getU8() != 0);
 
@@ -1269,6 +1286,10 @@ void ProtocolGame::parseOpenContainer(const InputMessagePtr& msg)
     bool hasPages = false;
     int containerSize = 0;
     int firstIndex = 0;
+
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU8(); // show search icon (boolean)
+    }
 
     if (g_game.getFeature(Otc::GameContainerPagination)) {
         isUnlocked = (msg->getU8() != 0); // drag and drop
@@ -1358,6 +1379,11 @@ void ProtocolGame::parseOpenNpcTrade(const InputMessagePtr& msg)
             msg->getU16(); // shop item id
         if (g_game.getProtocolVersion() >= 1240)
             msg->getString();
+    }
+
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU16(); // currency
+        msg->getString(); // currency name
     }
 
     int listCount;
@@ -1504,6 +1530,12 @@ void ProtocolGame::parseMagicEffect(const InputMessagePtr& msg)
         return;
     }
 
+    Otc::MagicEffectsType_t type = Otc::MAGIC_EFFECTS_CREATE_EFFECT;
+
+    if (g_game.getClientVersion() >= 1281) {
+        type = static_cast<Otc::MagicEffectsType_t>(msg->getU8()); // type
+    }
+
     int effectId;
     if (g_game.getFeature(Otc::GameMagicEffectU16))
         effectId = msg->getU16();
@@ -1513,6 +1545,12 @@ void ProtocolGame::parseMagicEffect(const InputMessagePtr& msg)
     if (!g_things.isValidDatId(effectId, ThingCategoryEffect)) {
         g_logger.traceError(stdext::format("invalid effect id %d", effectId));
         return;
+    }
+
+    // TODO support missiles
+
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU8(); // end loop
     }
 
     auto effect = std::make_shared<Effect>();
@@ -1559,16 +1597,25 @@ void ProtocolGame::parseDistanceMissile(const InputMessagePtr& msg)
     g_map.addThing(missile, fromPos);
 }
 
-void ProtocolGame::parseCreatureMark(const InputMessagePtr& msg)
+void ProtocolGame::parseItemClasses(const InputMessagePtr& msg)
 {
-    uint id = msg->getU32();
-    int color = msg->getU8();
+    int classSize = msg->getU8();
+    int tiersSize = 0;
 
-    CreaturePtr creature = g_map.getCreatureById(id);
-    if (creature)
-        creature->addTimedSquare(color);
-    else
-        g_logger.traceError("could not get creature");
+    for (uint8_t i = 0; i < classSize; ++i) {
+        msg->getU8(); // class id
+    }
+
+    // tiers
+    tiersSize = msg->getU8();
+    for (uint8_t j = 0; j < tiersSize; ++j) {
+        msg->getU8();  // tier id
+        msg->getU64(); // upgrade cost
+    }
+
+    for (uint8_t i = 0; i < tiersSize + 1; ++i) {
+        msg->getU8(); // ??
+    }
 }
 
 void ProtocolGame::parseTrappers(const InputMessagePtr& msg)
@@ -1723,6 +1770,10 @@ void ProtocolGame::parseEditText(const InputMessagePtr& msg)
     if (g_game.getFeature(Otc::GameTibia12Protocol) && g_game.getProtocolVersion() > 1240)
         msg->getU8();
 
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU8(); // suffix
+    }
+
     std::string date = "";
     if (g_game.getFeature(Otc::GameWritableDate))
         date = msg->getString();
@@ -1876,6 +1927,10 @@ void ProtocolGame::parsePlayerInfo(const InputMessagePtr& msg)
     for (int i = 0; i < spellCount; ++i)
         spells.push_back(msg->getU8()); // spell id
 
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU8(); // is magic shield active (bool)
+    }
+
     m_localPlayer->setPremium(premium);
     m_localPlayer->setVocation(vocation);
     m_localPlayer->setSpells(spells);
@@ -1894,13 +1949,14 @@ void ProtocolGame::parsePlayerStats(const InputMessagePtr& msg)
         maxHealth = msg->getU16();
     }
 
-    double freeCapacity;
+    double freeCapacity = 0;
+    double totalCapacity = 0;
     if (g_game.getFeature(Otc::GameDoubleFreeCapacity))
         freeCapacity = msg->getU32() / 100.0;
     else
         freeCapacity = msg->getU16() / 100.0;
 
-    double totalCapacity = freeCapacity;
+    totalCapacity = freeCapacity;
     if (g_game.getFeature(Otc::GameTotalCapacity) && !g_game.getFeature(Otc::GameTibia12Protocol))
         totalCapacity = msg->getU32() / 100.0;
 
@@ -1920,13 +1976,15 @@ void ProtocolGame::parsePlayerStats(const InputMessagePtr& msg)
 
     if (g_game.getFeature(Otc::GameExperienceBonus)) {
         if (g_game.getProtocolVersion() <= 1096) {
-            /*double experienceBonus = */msg->getDouble();
+            /*double experienceBonus = */ msg->getDouble();
         } else {
-            /*int baseXpGain = */msg->getU16();
+            /*int baseXpGain = */ msg->getU16();
             if (!g_game.getFeature(Otc::GameTibia12Protocol)) {
-                /*int voucherAddend = */msg->getU16();
+                if (g_game.getClientVersion() < 1281) {
+                    /*int voucherAddend = */ msg->getU16();
+                }
             }
-            /*int grindingAddend = */msg->getU16();
+            /*int grindingAddend = */ msg->getU16();
             /*int storeBoostAddend = */ msg->getU16();
             /*int huntingBoostFactor = */ msg->getU16();
         }
@@ -1944,24 +2002,21 @@ void ProtocolGame::parsePlayerStats(const InputMessagePtr& msg)
     }
 
     double magicLevel = 0;
-    if (!g_game.getFeature(Otc::GameTibia12Protocol)) {
-        if (g_game.getFeature(Otc::GameDoubleMagicLevel))
-            magicLevel = msg->getU16();
-        else
-            magicLevel = msg->getU8();
-    }
-
     double baseMagicLevel = 0;
-    if (!g_game.getFeature(Otc::GameTibia12Protocol)) {
-        if (g_game.getFeature(Otc::GameSkillsBase))
-            baseMagicLevel = msg->getU8();
-        else
-            baseMagicLevel = magicLevel;
-    }
-
     double magicLevelPercent = 0;
-    if (!g_game.getFeature(Otc::GameTibia12Protocol))
-        magicLevelPercent = msg->getU8();
+
+    if (!g_game.getFeature(Otc::GameTibia12Protocol)) {
+        if (g_game.getClientVersion() < 1281) {
+            magicLevel = msg->getU8();
+
+            if (g_game.getFeature(Otc::GameSkillsBase))
+                baseMagicLevel = msg->getU8();
+            else
+                baseMagicLevel = magicLevel;
+
+            magicLevelPercent = msg->getU8();
+        }
+    }
 
     double soul;
     if (g_game.getFeature(Otc::GameDoubleSoul))
@@ -1984,12 +2039,20 @@ void ProtocolGame::parsePlayerStats(const InputMessagePtr& msg)
     double training = 0;
     if (g_game.getFeature(Otc::GameOfflineTrainingTime)) {
         training = msg->getU16();
-        if (g_game.getProtocolVersion() >= 1097) {
-            /*int remainingStoreXpBoostSeconds = */msg->getU16();
-            /*bool canBuyMoreStoreXpBoosts = */msg->getU8();
-        }
     }
 
+    // Adicionado do mehah
+    if (g_game.getClientVersion() >= 1097) {
+        /*int xpBoostSeconds = */ msg->getU16();
+        /*bool canBuyBoost = */ msg->getU8();
+    }
+
+    if (g_game.getClientVersion() >= 1281) {
+        /*int remainingManaShield = */ msg->getU16();
+        /*int totalManaShield = */ msg->getU16();
+    }
+
+    // Aplicar valores ao jogador
     m_localPlayer->setHealth(health, maxHealth);
     m_localPlayer->setFreeCapacity(freeCapacity);
     if (!g_game.getFeature(Otc::GameTibia12Protocol))
@@ -2014,64 +2077,77 @@ void ProtocolGame::parsePlayerSkills(const InputMessagePtr& msg)
     if (g_game.getFeature(Otc::GameAdditionalSkills))
         lastSkill = Otc::LastSkill;
 
-    if (g_game.getFeature(Otc::GameTibia12Protocol)) {
-        int level = msg->getU16();
-        int baseLevel = msg->getU16();
-        msg->getU16(); // unknown
-        int levelPercent = msg->getU16();
-        m_localPlayer->setMagicLevel(level, levelPercent);
-        m_localPlayer->setBaseMagicLevel(baseLevel);
+    // Versão 12.81 ou superior — magic level vem separado
+    if (g_game.getClientVersion() >= 1281) {
+        int magicLevel = msg->getU16();
+        int baseMagicLevel = msg->getU16();
+        msg->getU16(); // unknown (bonus?)
+        int percent = msg->getU16();
+
+        m_localPlayer->setMagicLevel(magicLevel, percent);
+        m_localPlayer->setBaseMagicLevel(baseMagicLevel);
     }
 
-    for (int skill = 0; skill < lastSkill; skill++) {
-        int level;
-
+    for (int skill = Otc::Fist; skill <= Otc::Fishing; ++skill) {
+        int level = msg->getU8();
         if (g_game.getFeature(Otc::GameDoubleSkills))
             level = msg->getU16();
-        else
-            level = msg->getU8();
 
         int baseLevel;
-        if (g_game.getFeature(Otc::GameSkillsBase))
+        if (g_game.getFeature(Otc::GameSkillsBase)) {
             if (g_game.getFeature(Otc::GameBaseSkillU16))
                 baseLevel = msg->getU16();
             else
                 baseLevel = msg->getU8();
-        else
+        } else {
             baseLevel = level;
-
-        int levelPercent = 0;
-        // Critical, Life Leech and Mana Leech have no level percent
-        if (skill <= Otc::Fishing) {
-            if (g_game.getFeature(Otc::GameTibia12Protocol))
-                msg->getU16(); // unknown
-
-            if (g_game.getFeature(Otc::GameTibia12Protocol))
-                levelPercent = msg->getU16();
-            else
-                levelPercent = msg->getU8();
         }
 
-        m_localPlayer->setSkill((Otc::Skill)skill, level, levelPercent);
-        m_localPlayer->setBaseSkill((Otc::Skill)skill, baseLevel);
+        int levelPercent = 0;
+        if (g_game.getClientVersion() >= 1281) {
+            msg->getU16(); // base + loyalty bonus?
+            levelPercent = msg->getU16();
+        } else {
+            levelPercent = msg->getU8();
+        }
+
+        m_localPlayer->setSkill(static_cast<Otc::Skill>(skill), level, levelPercent);
+        m_localPlayer->setBaseSkill(static_cast<Otc::Skill>(skill), baseLevel);
     }
 
-    if (g_game.getFeature(Otc::GameTibia12Protocol)) {
-        uint32_t totalCapacity = msg->getU32();
-        msg->getU32(); // base capacity?
-        m_localPlayer->setTotalCapacity(totalCapacity);
+    // Additional skills (Critical, Leech, Dodge, etc.)
+    if (g_game.getFeature(Otc::GameAdditionalSkills)) {
+        for (int skill = Otc::CriticalChance; skill < Otc::LastSkill; ++skill) {
+            int level = msg->getU16();
+            int baseLevel = msg->getU16();
+
+            m_localPlayer->setSkill(static_cast<Otc::Skill>(skill), level, 0);
+            m_localPlayer->setBaseSkill(static_cast<Otc::Skill>(skill), baseLevel);
+        }
+    }
+
+    // Total capacity (12.81+)
+    if (g_game.getClientVersion() >= 1281) {
+        int capacity = msg->getU32();      // base + bonus
+        int baseCapacity = msg->getU32();  // base only
+
+        // m_localPlayer->setFreeCapacity(free); // opcional
+        m_localPlayer->setTotalCapacity(capacity);
     }
 }
 
 void ProtocolGame::parsePlayerState(const InputMessagePtr& msg)
 {
     int states;
-    if (g_game.getFeature(Otc::GamePlayerStateU32))
+
+    if (g_game.getClientVersion() >= 1281) {
         states = msg->getU32();
-    else if (g_game.getFeature(Otc::GamePlayerStateU16))
-        states = msg->getU16();
-    else
-        states = msg->getU8();
+    } else {
+        if (g_game.getFeature(Otc::GamePlayerStateU16))
+            states = msg->getU16();
+        else
+            states = msg->getU8();
+    }
 
     m_localPlayer->setStates(states);
 }
@@ -2132,6 +2208,10 @@ void ProtocolGame::parseTalk(const InputMessagePtr& msg)
 
     if (statement > 0 && g_game.getFeature(Otc::GameTibia12Protocol) && g_game.getProtocolVersion() > 1240)
         msg->getU8();
+
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU8(); // suffix
+    }
 
     int level = 0;
     if (g_game.getFeature(Otc::GameMessageLevel)) {
@@ -2425,22 +2505,32 @@ void ProtocolGame::parseFloorChangeDown(const InputMessagePtr& msg)
 
 void ProtocolGame::parseOpenOutfitWindow(const InputMessagePtr& msg)
 {
-    Outfit currentOutfit = getOutfit(msg);
-    std::vector<std::tuple<int, std::string, int> > outfitList;
+    const Outfit currentOutfit = getOutfit(msg);
+    std::vector<std::tuple<int, std::string, int>> outfitList;
+    std::vector<std::tuple<int, std::string>> mountList;
+    std::vector<std::tuple<int, std::string>> wingList;
+    std::vector<std::tuple<int, std::string>> auraList;
+    std::vector<std::tuple<int, std::string>> shaderList;
+    std::vector<std::tuple<int, std::string>> healthBarList;
+    std::vector<std::tuple<int, std::string>> manaBarList;
+
+    if (g_game.getClientVersion() >= 1281 && currentOutfit.getMount() == 0) {
+        msg->getU8();   // head
+        msg->getU8();   // body
+        msg->getU8();   // legs
+        msg->getU8();   // feet
+        msg->getU16();  // familiar looktype
+    }
 
     if (g_game.getFeature(Otc::GameNewOutfitProtocol)) {
-        int outfitCount = g_game.getFeature(Otc::GameTibia12Protocol) ? msg->getU16() : msg->getU8();
-        for (int i = 0; i < outfitCount; i++) {
+        const int outfitCount = g_game.getClientVersion() >= 1281 ? msg->getU16() : msg->getU8();
+        for (int i = 0; i < outfitCount; ++i) {
             int outfitId = msg->getU16();
             std::string outfitName = msg->getString();
             int outfitAddons = msg->getU8();
-            if (g_game.getFeature(Otc::GameTibia12Protocol)) {
-                bool locked = msg->getU8() > 0;
-                if (locked) {
-                    msg->getU32(); // store offer id
-                }
-            }
-            outfitList.push_back(std::make_tuple(outfitId, outfitName, outfitAddons));
+            if (g_game.getClientVersion() >= 1281)
+                msg->getU8(); // mode: 0x00 available, 0x01 store, 0x02 golden
+            outfitList.emplace_back(outfitId, outfitName, outfitAddons);
         }
     } else {
         int outfitStart, outfitEnd;
@@ -2451,31 +2541,26 @@ void ProtocolGame::parseOpenOutfitWindow(const InputMessagePtr& msg)
             outfitStart = msg->getU8();
             outfitEnd = msg->getU8();
         }
-
-        for (int i = outfitStart; i <= outfitEnd; i++)
-            outfitList.push_back(std::make_tuple(i, "", 0));
+        for (int i = outfitStart; i <= outfitEnd; ++i)
+            outfitList.emplace_back(i, "", 0);
     }
 
-    std::vector<std::tuple<int, std::string> > mountList;
-    std::vector<std::tuple<int, std::string> > wingList;
-    std::vector<std::tuple<int, std::string> > auraList;
-    std::vector<std::tuple<int, std::string> > shaderList;
-    std::vector<std::tuple<int, std::string> > healthBarList;
-    std::vector<std::tuple<int, std::string> > manaBarList;
     if (g_game.getFeature(Otc::GamePlayerMounts)) {
-        int mountCount = g_game.getFeature(Otc::GameTibia12Protocol) ? msg->getU16() : msg->getU8();
+        const int mountCount = g_game.getClientVersion() >= 1281 ? msg->getU16() : msg->getU8();
         for (int i = 0; i < mountCount; ++i) {
-            int mountId = msg->getU16(); // mount type
-            std::string mountName = msg->getString(); // mount name
-            if (g_game.getFeature(Otc::GameTibia12Protocol)) {
-                bool locked = msg->getU8() > 0;
-                if (locked) {
-                    msg->getU32(); // store offer id
-                }
-            }
-
-            mountList.push_back(std::make_tuple(mountId, mountName));
+            int mountId = msg->getU16();
+            std::string mountName = msg->getString();
+            if (g_game.getClientVersion() >= 1281)
+                msg->getU8(); // mode
+            mountList.emplace_back(mountId, mountName);
         }
+    }
+
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU16(); // familiars.size()
+        // size > 0, each would read looktype (U16), name, and mode
+        msg->getU8();  // try outfit mode
+        msg->getU8();  // mounted
     }
 
     if (g_game.getFeature(Otc::GameWingsAndAura)) {
@@ -2483,13 +2568,13 @@ void ProtocolGame::parseOpenOutfitWindow(const InputMessagePtr& msg)
         for (int i = 0; i < wingCount; ++i) {
             int wingId = msg->getU16();
             std::string wingName = msg->getString();
-            wingList.push_back(std::make_tuple(wingId, wingName));
+            wingList.emplace_back(wingId, wingName);
         }
         int auraCount = msg->getU8();
         for (int i = 0; i < auraCount; ++i) {
             int auraId = msg->getU16();
             std::string auraName = msg->getString();
-            auraList.push_back(std::make_tuple(auraId, auraName));
+            auraList.emplace_back(auraId, auraName);
         }
     }
 
@@ -2498,7 +2583,7 @@ void ProtocolGame::parseOpenOutfitWindow(const InputMessagePtr& msg)
         for (int i = 0; i < shaderCount; ++i) {
             int shaderId = msg->getU16();
             std::string shaderName = msg->getString();
-            shaderList.push_back(std::make_tuple(shaderId, shaderName));
+            shaderList.emplace_back(shaderId, shaderName);
         }
     }
 
@@ -2507,20 +2592,15 @@ void ProtocolGame::parseOpenOutfitWindow(const InputMessagePtr& msg)
         for (int i = 0; i < count; ++i) {
             int id = msg->getU16();
             std::string name = msg->getString();
-            healthBarList.push_back(std::make_tuple(id, name));
+            healthBarList.emplace_back(id, name);
         }
 
         count = msg->getU8();
         for (int i = 0; i < count; ++i) {
             int id = msg->getU16();
             std::string name = msg->getString();
-            manaBarList.push_back(std::make_tuple(id, name));
+            manaBarList.emplace_back(id, name);
         }
-    }
-
-    if (g_game.getFeature(Otc::GameTibia12Protocol)) {
-        msg->getU8(); // tryOnMount, tryOnOutfit
-        msg->getU8(); // mounted?
     }
 
     g_game.processOpenOutfitWindow(currentOutfit, outfitList, mountList, wingList, auraList, shaderList, healthBarList, manaBarList);
@@ -2534,17 +2614,17 @@ void ProtocolGame::parseVipAdd(const InputMessagePtr& msg)
 
     id = msg->getU32();
     name = g_game.formatCreatureName(msg->getString());
+
     if (g_game.getFeature(Otc::GameAdditionalVipInfo)) {
         desc = msg->getString();
         iconId = msg->getU32();
         notifyLogin = msg->getU8();
     }
+
     status = msg->getU8();
 
-    if (g_game.getFeature(Otc::GameTibia12Protocol)) {
-        int groups = msg->getU8();
-        for (int i = 0; i < groups; ++i)
-            msg->getU8(); // group id
+    if (g_game.getClientVersion() >= 1281) {
+        msg->getU8(); // vip groups
     }
 
     g_game.processVipAdd(id, name, status, desc, iconId, notifyLogin);
@@ -3330,15 +3410,28 @@ Outfit ProtocolGame::getOutfit(const InputMessagePtr& msg, bool ignoreMount)
 
     if (!ignoreMount) {
         if (g_game.getFeature(Otc::GamePlayerMounts)) {
-            outfit.setMount(msg->getU16());
+            const int mount = msg->getU16();
+
+            // Adição compatível com 12.81+
+            if (g_game.getClientVersion() >= 1281 && mount != 0) {
+                msg->getU8(); // head
+                msg->getU8(); // body
+                msg->getU8(); // legs
+                msg->getU8(); // feet
+            }
+
+            outfit.setMount(mount);
         }
+
         if (g_game.getFeature(Otc::GameWingsAndAura)) {
             outfit.setWings(msg->getU16());
             outfit.setAura(msg->getU16());
         }
+
         if (g_game.getFeature(Otc::GameOutfitShaders)) {
             outfit.setShader(msg->getString());
         }
+
         if (g_game.getFeature(Otc::GameHealthInfoBackground)) {
             outfit.setHealthBar(msg->getU16());
             outfit.setManaBar(msg->getU16());
@@ -3351,15 +3444,17 @@ Outfit ProtocolGame::getOutfit(const InputMessagePtr& msg, bool ignoreMount)
 ThingPtr ProtocolGame::getThing(const InputMessagePtr& msg)
 {
     ThingPtr thing;
-
-    int id = msg->getU16();
+    const int id = msg->getU16();
 
     if (id == 0)
-        stdext::throw_exception("invalid thing id (0)");
+        stdext::throw_exception("invalid thing id");
+
     else if (id == Proto::UnknownCreature || id == Proto::OutdatedCreature || id == Proto::Creature)
         thing = getCreature(msg, id);
+
     else if (id == Proto::StaticText) // otclient only
         thing = getStaticText(msg, id);
+
     else // item
         thing = getItem(msg, id, false);
 
@@ -3399,15 +3494,17 @@ CreaturePtr ProtocolGame::getCreature(const InputMessagePtr& msg, int type)
 
     CreaturePtr creature;
     bool known = (type != Proto::UnknownCreature);
+
     if (type == Proto::OutdatedCreature || type == Proto::UnknownCreature) {
         if (known) {
-            uint id = msg->getU32();
+            const uint id = msg->getU32();
             creature = g_map.getCreatureById(id);
             if (!creature)
                 g_logger.traceError("server said that a creature is known, but it's not");
         } else {
-            uint removeId = msg->getU32();
-            uint id = msg->getU32();
+            const uint removeId = msg->getU32();
+            const uint id = msg->getU32();
+
             if (id == removeId) {
                 creature = g_map.getCreatureById(id);
             } else {
@@ -3429,61 +3526,61 @@ CreaturePtr ProtocolGame::getCreature(const InputMessagePtr& msg, int type)
                     creatureType = Proto::CreatureTypeNpc;
             }
 
-            if (g_game.getFeature(Otc::GameTibia12Protocol) && creatureType == Proto::CreatureTypeSummonOwn)
-                msg->getU32(); // master
+            if (g_game.getClientVersion() >= 1281 && creatureType == Proto::CreatureTypeSummonOwn)
+                msg->getU32(); // master id
 
-            std::string name = g_game.formatCreatureName(msg->getString());
+            const std::string name = g_game.formatCreatureName(msg->getString());
 
             if (creature) {
                 creature->setName(name);
             } else {
-                if (id == m_localPlayer->getId())
+                if (id == m_localPlayer->getId()) {
                     creature = m_localPlayer;
-                else if (creatureType == Proto::CreatureTypePlayer) {
-                    // fixes a bug server side bug where GameInit is not sent and local player id is unknown
+                } else if (creatureType == Proto::CreatureTypePlayer) {
                     if (m_localPlayer->getId() == 0 && name == m_localPlayer->getName())
                         creature = m_localPlayer;
                     else
                         creature = std::make_shared<Player>();
-                } else if (creatureType == Proto::CreatureTypeMonster)
+                } else if (creatureType == Proto::CreatureTypeMonster) {
                     creature = std::make_shared<Monster>();
-                else if (creatureType == Proto::CreatureTypeNpc)
+                } else if (creatureType == Proto::CreatureTypeNpc) {
                     creature = std::make_shared<Npc>();
-                else if (creatureType == Proto::CreatureTypeSummonOwn) {
+                } else if (creatureType == Proto::CreatureTypeSummonOwn) {
                     creature = std::make_shared<Monster>();
-                } else
+                } else {
                     g_logger.traceError("creature type is invalid");
+                }
 
                 if (creature) {
                     creature->setId(id);
                     creature->setName(name);
-
                     g_map.addCreature(creature);
                 }
             }
         }
 
-        int healthPercent = msg->getU8();
+        const int healthPercent = msg->getU8();
         int8 manaPercent = -1;
         if (g_game.getFeature(Otc::GameCreaturesMana)) {
-            if (msg->getU8() == 0x01) {
+            if (msg->getU8() == 0x01)
                 manaPercent = msg->getU8();
-            }
         }
-        Otc::Direction direction = (Otc::Direction)msg->getU8();
-        Outfit outfit = getOutfit(msg);
+
+        const auto direction = static_cast<Otc::Direction>(msg->getU8());
+        const Outfit& outfit = getOutfit(msg);
 
         Light light;
         light.intensity = msg->getU8();
         light.color = msg->getU8();
 
-        int speed = msg->getU16();
-        if (g_game.getFeature(Otc::GameTibia12Protocol) && g_game.getProtocolVersion() >= 1240)
-            msg->getU8();
-        int skull = msg->getU8();
-        int shield = msg->getU8();
+        const int speed = msg->getU16();
 
-        // emblem is sent only when the creature is not known
+        if (g_game.getClientVersion() >= 1281)
+            msg->getU8(); // creature debuffs
+
+        const int skull = msg->getU8();
+        const int shield = msg->getU8();
+
         int8 emblem = -1;
         int8 creatureType = -1;
         int8 icon = -1;
@@ -3495,24 +3592,25 @@ CreaturePtr ProtocolGame::getCreature(const InputMessagePtr& msg, int type)
 
         if (g_game.getFeature(Otc::GameThingMarks)) {
             creatureType = msg->getU8();
-            if (g_game.getFeature(Otc::GameTibia12Protocol)) {
+
+            if (g_game.getClientVersion() >= 1281) {
                 if (creatureType == Proto::CreatureTypeSummonOwn)
-                    msg->getU32(); // master
-                if (g_game.getProtocolVersion() >= 1215 && creatureType == Proto::CreatureTypePlayer)
-                    msg->getU8(); // vocation id
+                    msg->getU32();
+                else if (creatureType == Proto::CreatureTypePlayer)
+                    msg->getU8(); // vocation ID
             }
         }
 
-        if (g_game.getFeature(Otc::GameCreatureIcons)) {
+        if (g_game.getFeature(Otc::GameCreatureIcons))
             icon = msg->getU8();
-        }
 
         if (g_game.getFeature(Otc::GameThingMarks)) {
-            mark = msg->getU8(); // mark
-            if (g_game.getFeature(Otc::GameTibia12Protocol))
-                msg->getU8(); // inspection?
+            mark = msg->getU8();
+
+            if (g_game.getClientVersion() >= 1281)
+                msg->getU8(); // inspection type
             else
-                msg->getU16(); // helpers?
+                msg->getU16(); // helpers
 
             if (creature) {
                 if (mark == 0xff)
@@ -3522,14 +3620,13 @@ CreaturePtr ProtocolGame::getCreature(const InputMessagePtr& msg, int type)
             }
         }
 
-        if (g_game.getProtocolVersion() >= 854 || g_game.getFeature(Otc::GameCreatureWalkthrough))
+        if (g_game.getClientVersion() >= 854 || g_game.getFeature(Otc::GameCreatureWalkthrough))
             unpass = msg->getU8();
 
         if (creature) {
             creature->setHealthPercent(healthPercent);
-            if (g_game.getFeature(Otc::GameCreaturesMana)) {
+            if (g_game.getFeature(Otc::GameCreaturesMana))
                 creature->setManaPercent(manaPercent);
-            }
             creature->setDirection(direction);
             creature->setOutfit(outfit);
             creature->setSpeed(speed);
@@ -3551,26 +3648,24 @@ CreaturePtr ProtocolGame::getCreature(const InputMessagePtr& msg, int type)
                 m_localPlayer->setKnown(true);
         }
     } else if (type == Proto::Creature) {
-        uint id = msg->getU32();
+        const uint id = msg->getU32();
         creature = g_map.getCreatureById(id);
 
         if (!creature)
             g_logger.traceError("invalid creature");
 
-        Otc::Direction direction = (Otc::Direction)msg->getU8();
+        const auto direction = static_cast<Otc::Direction>(msg->getU8());
         if (creature) {
             if (creature != g_game.getLocalPlayer() || !g_game.isIgnoringServerDirection() || !g_game.getFeature(Otc::GameNewWalking)) {
                 creature->turn(direction);
             }
         }
 
-        if (g_game.getProtocolVersion() >= 953 || g_game.getFeature(Otc::GameCreatureDirectionPassable)) {
-            bool unpass = msg->getU8();
-
+        if (g_game.getClientVersion() >= 953 || g_game.getFeature(Otc::GameCreatureDirectionPassable)) {
+            const bool unpass = msg->getU8();
             if (creature)
                 creature->setPassable(!unpass);
         }
-
     } else {
         stdext::throw_exception("invalid creature opcode");
     }
@@ -3580,64 +3675,16 @@ CreaturePtr ProtocolGame::getCreature(const InputMessagePtr& msg, int type)
 
 ItemPtr ProtocolGame::getItem(const InputMessagePtr& msg, int id, bool hasDescription)
 {
-    if (id == 0)
+    if(id == 0)
         id = msg->getU16();
 
     ItemPtr item = Item::create(id);
-    if (item->getId() == 0)
-        stdext::throw_exception(stdext::format("unable to create item with invalid id %d", id));
-
-    if (g_game.getFeature(Otc::GameThingMarks) && !g_game.getFeature(Otc::GameTibia12Protocol)) {
-        msg->getU8(); // mark
-    }
-
-    if (item->isStackable() || item->isChargeable()) {
-        item->setCountOrSubType(g_game.getFeature(Otc::GameCountU16) ? msg->getU16() : msg->getU8());
-    }
-    else if (item->isFluidContainer() || item->isSplash()) {
-        item->setCountOrSubType(msg->getU8());
-    }
-    else if (item->rawGetThingType()->isContainer() && (g_game.getFeature(Otc::GameTibia12Protocol) || g_game.getFeature(Otc::GameQuickLootFlags))) {
-        // not sure about this part
-        uint8_t hasQuickLootFlags = msg->getU8();
-        if (hasQuickLootFlags > 0) {
-            item->setQuickLootFlags(msg->getU32()); // quick loot flags
+    if(item) {
+        if(hasDescription) {
+            item->setCountOrSubType(msg->getU8());
+            item->setCount(msg->getU8());
         }
     }
-
-    if (g_game.getFeature(Otc::GameItemAnimationPhase)) {
-        if (item->getAnimationPhases() > 1) {
-            // 0x00 => automatic phase
-            // 0xFE => random phase
-            // 0xFF => async phase
-            msg->getU8();
-            //item->setPhase(msg->getU8());
-        }
-    }
-
-    if (g_game.getFeature(Otc::GameItemTooltip) && hasDescription) {
-        item->setTooltip(msg->getString());
-    }
-
-    if (g_game.getFeature(Otc::GameItemCustomAttributes)) {
-        uint16 size = msg->getU16();
-        for (uint16 i = 0; i < size; ++i) {
-            uint16 key = msg->getU16();
-            uint64 value = msg->getU64();
-            item->setCustomAttribute(key, value);
-        }
-    }
-
-    if (g_game.getFeature(Otc::GameDisplayItemDuration)) {
-        bool hasDuration = msg->getU8() == 1;
-        if (hasDuration) {
-            uint32 duration = msg->getU32();
-            bool stopTime = msg->getU8() == 1;
-            item->setDurationTime(duration + stdext::unixtimeMs());
-            item->setDurationIsPaused(stopTime);
-        }
-    }
-
     return item;
 }
 

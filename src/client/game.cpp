@@ -164,9 +164,9 @@ void Game::processLoginWait(const std::string& message, int time)
     g_lua.callGlobalField("g_game", "onLoginWait", message, time);
 }
 
-void Game::processLoginToken(bool unknown)
+void Game::processSessionEnd(int reason)
 {
-    g_lua.callGlobalField("g_game", "onLoginToken", unknown);
+    g_lua.callGlobalField("g_game", "onSessionEnd", reason);
 }
 
 void Game::processLogin()
@@ -1607,6 +1607,12 @@ void Game::setClientVersion(int version)
         stdext::throw_exception("Unable to change client version while online");
 
     m_clientVersion = version;
+
+    if (version >= 1281) {
+        disableFeature(Otc::GameEnvironmentEffect);
+        disableFeature(Otc::GameItemAnimationPhase);
+    }
+    
     g_lua.callGlobalField("g_game", "onClientVersionChange", version);
 }
 

@@ -155,6 +155,7 @@ private:
     void parseStoreOffers(const InputMessagePtr& msg);
     void parseCompleteStorePurchase(const InputMessagePtr& msg);
     void parseRequestPurchaseData(const InputMessagePtr& msg);
+    void parseWorldTime(const InputMessagePtr& msg);
     void parseCoinBalance(const InputMessagePtr& msg);
     void parseCoinBalanceUpdate(const InputMessagePtr& msg);
     void parseBlessings(const InputMessagePtr& msg);
@@ -172,7 +173,7 @@ private:
     void parseLoginError(const InputMessagePtr& msg);
     void parseLoginAdvice(const InputMessagePtr& msg);
     void parseLoginWait(const InputMessagePtr& msg);
-    void parseLoginToken(const InputMessagePtr& msg);
+    void parseSessionEnd(const InputMessagePtr& msg);
     void parsePing(const InputMessagePtr& msg);
     void parsePingBack(const InputMessagePtr& msg);
     void parseNewPing(const InputMessagePtr& msg);
@@ -203,7 +204,7 @@ private:
     void parseMagicEffect(const InputMessagePtr& msg);
     void parseAnimatedText(const InputMessagePtr& msg);
     void parseDistanceMissile(const InputMessagePtr& msg);
-    void parseCreatureMark(const InputMessagePtr& msg);
+    void parseItemClasses(const InputMessagePtr& msg);
     void parseTrappers(const InputMessagePtr& msg);
     void parseCreatureHealth(const InputMessagePtr& msg);
     void parseCreatureLight(const InputMessagePtr& msg);

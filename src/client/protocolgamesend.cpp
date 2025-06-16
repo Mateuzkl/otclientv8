@@ -829,8 +829,19 @@ void ProtocolGame::sendChangeOutfit(const Outfit& outfit)
     msg->addU8(outfit.getFeet());
     if(g_game.getFeature(Otc::GamePlayerAddons))
         msg->addU8(outfit.getAddons());
-    if(g_game.getFeature(Otc::GamePlayerMounts))
+    if(g_game.getFeature(Otc::GamePlayerMounts)){
         msg->addU16(outfit.getMount());
+    if(g_game.getClientVersion() >= 1281) {
+            msg->addU8(0x00);
+            msg->addU8(0x00);
+            msg->addU8(0x00);
+            msg->addU8(0x00);
+        }
+    }
+
+    if(g_game.getClientVersion() >= 1281) {
+        msg->addU16(0x00); //familiars
+    }
     if (g_game.getFeature(Otc::GameWingsAndAura)) {
         msg->addU16(outfit.getWings());
         msg->addU16(outfit.getAura());

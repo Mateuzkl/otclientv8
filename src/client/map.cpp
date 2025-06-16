@@ -123,6 +123,13 @@ void Map::addThing(const ThingPtr& thing, const Position& pos, int stackPos)
     if(!thing)
         return;
 
+    if (thing->isItem()) {
+        const ItemPtr& item = thing->static_self_cast<Item>();
+        if (item && item->getClientId() == 0) {
+            return;
+        }
+    }
+
     if(thing->isItem() || thing->isCreature() || thing->isEffect()) {
         const TilePtr& tile = getOrCreateTile(pos);
         if(tile)

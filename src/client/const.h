@@ -164,6 +164,9 @@ namespace Otc
         LifeLeechAmount,
         ManaLeechChance,
         ManaLeechAmount,
+        Fatal,
+        Dodge,
+        Momentum,
         LastSkill
     };
 
@@ -494,6 +497,15 @@ namespace Otc
         LastGameFeature = 130
     };
 
+    enum MagicEffectsType_t : uint8_t {
+        MAGIC_EFFECTS_END_LOOP = 0, // ends the magic effect loop
+        MAGIC_EFFECTS_DELTA = 1, // needs uint8_t delta after type to adjust position
+        MAGIC_EFFECTS_DELAY = 2, // needs uint16_t delay after type to delay in miliseconds effect display
+        MAGIC_EFFECTS_CREATE_EFFECT = 3, // needs uint8_t effectid after type
+        MAGIC_EFFECTS_CREATE_DISTANCEEFFECT = 4, // needs uint8_t and deltaX(int8_t), deltaY(int8_t) after type
+        MAGIC_EFFECTS_CREATE_DISTANCEEFFECT_REVERSED = 5, // needs uint8_t and deltaX(int8_t), deltaY(int8_t) after type
+    };
+
     enum PathFindResult {
         PathFindResultOk = 0,
         PathFindResultSamePosition,
@@ -639,15 +651,6 @@ namespace Otc
         PREY_UNLOCK_STORE_AND_PREMIUM = 0,
         PREY_UNLOCK_STORE = 1,
         PREY_UNLOCK_NONE = 2,
-    };
-
-    enum MagicEffectsType_t : uint8_t {
-        MAGIC_EFFECTS_END_LOOP = 0,
-        MAGIC_EFFECTS_DELTA = 1,
-        MAGIC_EFFECTS_DELAY = 2,
-        MAGIC_EFFECTS_CREATE_EFFECT = 3,
-        MAGIC_EFFECTS_CREATE_DISTANCEEFFECT = 4,
-        MAGIC_EFFECTS_CREATE_DISTANCEEFFECT_REVERSED = 5,
     };
 }
 

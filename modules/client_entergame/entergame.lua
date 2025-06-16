@@ -7,6 +7,7 @@ local enterGameButton
 local logpass
 local clientBox
 local protocolLogin
+local protocolHttp
 local server = nil
 local versionsFound = false
 
@@ -16,7 +17,7 @@ local serverSelector
 local clientVersionSelector
 local serverHostTextEdit
 local rememberPasswordBox
-local protos = {"740", "760", "772", "792", "800", "810", "854", "860", "870", "910", "961", "1000", "1077", "1090", "1096", "1098", "1099", "1100", "1200", "1220"}
+local protos = {"740", "760", "772", "792", "800", "810", "854", "860", "870", "910", "961", "1000", "1077", "1090", "1096", "1098", "1099", "1100", "1200", "1220", "1281"}
 
 local checkedByUpdater = {}
 local waitingForHttpResults = 0
@@ -375,6 +376,10 @@ function EnterGame.terminate()
     logpass = nil
   end
   
+  if protocolHttp then
+    protocolHttp = nil
+  end
+  
   enterGame:destroy()
   if loadBox then
     loadBox:destroy()
@@ -525,51 +530,141 @@ function EnterGame.doLogin(account, password, token, host)
     end
   end
 
-  protocolLogin = ProtocolLogin.create()
-  protocolLogin.onLoginError = onProtocolError
-  protocolLogin.onSessionKey = onSessionKey
-  protocolLogin.onCharacterList = onCharacterList
-  protocolLogin.onUpdateNeeded = onUpdateNeeded
-  protocolLogin.onProxyList = onProxyList
+  if G.clientVersion >= 1281 then
+    -- http login server
+    protocolHttp = ProtocolHttp.create()
+    protocolHttp.onConnect = function(protocol)
+      local body = "{\"email\": \"" .. G.account .. "\", \"password\": \"" .. G.password .. "\"}"
+      local message = ''
+      message = message .. "POST /login HTTP/1.1\r\n"
+      message = message .. "Host: " .. server_ip .. "\r\n"
+      message = message .. "Accept: */*\r\n"
+      message = message .. "Content-Type: application/json\r\n"
+      message = message .. "Connection: close\r\n"
+      message = message .. "Content-Length: " .. body:len() .. "\r\n\r\n"
+      message = message .. body
+      protocol:send(message)
+      protocol:recv()
+    end
+    protocolHttp.onRecv = function(protocol, message)
+      local split = message:split('\r\n\r\n')
+      if #split < 2 or not string.find(message, 'HTTP/1.1 200 OK') then
+        onProtocolError(nil, "Connection timed out.", 408)
+        return
+      end
 
-  EnterGame.hide()
-  loadBox = displayCancelBox(tr('Please wait'), tr('Connecting to login server...'))
-  connect(loadBox, { onCancel = function(msgbox)
-                                  loadBox = nil
-                                  protocolLogin:cancelLogin()
-                                  EnterGame.show()
-                                end })
+      protocol:disconnect()
 
-  if G.clientVersion == 1000 then -- some people don't understand that tibia 10 uses 1100 protocol
-    G.clientVersion = 1100
-  end
-  -- if you have custom rsa or protocol edit it here
-  g_game.setClientVersion(G.clientVersion)
-  g_game.setProtocolVersion(g_game.getClientProtocolVersion(G.clientVersion))
-  g_game.setCustomProtocolVersion(0)
-  g_game.setCustomOs(-1) -- disable
-  g_game.chooseRsa(G.host)
-  if #server_params <= 3 and not g_game.getFeature(GameExtendedOpcode) then
-    g_game.setCustomOs(2) -- set os to windows if opcodes are disabled
-  end
+      local response = json.decode(split[2])
+      if response.errorMessage then
+        onProtocolError(nil, response.errorMessage, response.errorCode)
+        return
+      end
 
-  -- extra features from init.lua
-  for i = 4, #server_params do
-    g_game.enableFeature(tonumber(server_params[i]))
-  end
-  
-  -- proxies
-  if g_proxy then
-    g_proxy.clear()
-  end
-  
-  if modules.game_things.isLoaded() then
-    g_logger.info("Connecting to: " .. server_ip .. ":" .. server_port)
-    protocolLogin:login(server_ip, server_port, G.account, G.password, G.authenticatorToken, G.stayLogged)
+      local worlds = {}
+      for _, world in ipairs(response.playdata.worlds) do
+        worlds[world.id] = {
+          name = world.name,
+          ip = world.externaladdress,
+          port = world.externalport,
+          previewState = world.previewstate == 1,
+        }
+      end
+
+      local characters = {}
+      for index, character in ipairs(response.playdata.characters) do
+        local world = worlds[character.worldid]
+        characters[index] = {
+          name = character.name,
+          worldName = world.name,
+          worldIp = world.ip,
+          worldPort = world.port,
+          previewState = world.previewstate
+        }
+      end
+
+      local account = {
+        status = "",
+        premDays = math.floor((response.session.premiumuntil - os.time()) / 86400),
+        subStatus = response.session.premiumuntil > os.time() and SubscriptionStatus.Premium or SubscriptionStatus.Free,
+      }
+
+      -- set session key
+      G.sessionKey = response.session.sessionkey
+
+      onCharacterList(nil, characters, account)
+    end
+    protocolHttp.onError = onProtocolError
+
+    loadBox = displayCancelBox(tr('Please wait'), tr('Connecting to login server...'))
+    connect(loadBox, {
+      onCancel = function(msgbox)
+        loadBox = nil
+        protocolHttp:disconnect()
+        EnterGame.show()
+      end
+    })
+
+    g_game.setClientVersion(G.clientVersion)
+    g_game.setProtocolVersion(g_game.getClientProtocolVersion(G.clientVersion))
+    g_game.chooseRsa(G.host)
+
+    if modules.game_things.isLoaded() then
+      g_logger.info("Connecting to: " .. server_ip .. ":" .. server_port)
+      protocolHttp:connect(server_ip, server_port)
+    else
+      loadBox:destroy()
+      loadBox = nil
+      EnterGame.show()
+    end
   else
-    loadBox:destroy()
-    loadBox = nil
-    EnterGame.show()
+    protocolLogin = ProtocolLogin.create()
+    protocolLogin.onLoginError = onProtocolError
+    protocolLogin.onSessionKey = onSessionKey
+    protocolLogin.onCharacterList = onCharacterList
+    protocolLogin.onUpdateNeeded = onUpdateNeeded
+    protocolLogin.onProxyList = onProxyList
+
+    loadBox = displayCancelBox(tr('Please wait'), tr('Connecting to login server...'))
+    connect(loadBox, {
+      onCancel = function(msgbox)
+        loadBox = nil
+        protocolLogin:cancelLogin()
+        EnterGame.show()
+      end
+    })
+
+    if G.clientVersion == 1000 then -- some people don't understand that tibia 10 uses 1100 protocol
+      G.clientVersion = 1100
+    end
+    -- if you have custom rsa or protocol edit it here
+    g_game.setClientVersion(G.clientVersion)
+    g_game.setProtocolVersion(g_game.getClientProtocolVersion(G.clientVersion))
+    g_game.setCustomProtocolVersion(0)
+    g_game.setCustomOs(-1) -- disable
+    g_game.chooseRsa(G.host)
+    if #server_params <= 3 and not g_game.getFeature(GameExtendedOpcode) then
+      g_game.setCustomOs(2) -- set os to windows if opcodes are disabled
+    end
+
+    -- extra features from init.lua
+    for i = 4, #server_params do
+      g_game.enableFeature(tonumber(server_params[i]))
+    end
+    
+    -- proxies
+    if g_proxy then
+      g_proxy.clear()
+    end
+    
+    if modules.game_things.isLoaded() then
+      g_logger.info("Connecting to: " .. server_ip .. ":" .. server_port)
+      protocolLogin:login(server_ip, server_port, G.account, G.password, G.authenticatorToken, G.stayLogged)
+    else
+      loadBox:destroy()
+      loadBox = nil
+      EnterGame.show()
+    end
   end
 end
 

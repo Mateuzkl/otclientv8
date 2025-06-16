@@ -71,8 +71,10 @@ end
 
 function resetSkillColor(id)
   local skill = skillsWindow:recursiveGetChildById(id)
-  local widget = skill:getChildById('value')
-  widget:setColor('#bbbbbb')
+  if skill then
+    local widget = skill:getChildById('value')
+    widget:setColor('#bbbbbb')
+  end
 end
 
 function toggleSkill(id, state)
@@ -85,50 +87,54 @@ function setSkillBase(id, value, baseValue)
     return
   end
   local skill = skillsWindow:recursiveGetChildById(id)
-  local widget = skill:getChildById('value')
+  if skill then
+    local widget = skill:getChildById('value')
 
-  if value > baseValue then
-    widget:setColor('#008b00') -- green
-    skill:setTooltip(baseValue .. ' +' .. (value - baseValue))
-  elseif value < baseValue then
-    widget:setColor('#b22222') -- red
-    skill:setTooltip(baseValue .. ' ' .. (value - baseValue))
-  else
-    widget:setColor('#bbbbbb') -- default
-    skill:removeTooltip()
+    if value > baseValue then
+      widget:setColor('#008b00') -- green
+      skill:setTooltip(baseValue .. ' +' .. (value - baseValue))
+    elseif value < baseValue then
+      widget:setColor('#b22222') -- red
+      skill:setTooltip(baseValue .. ' ' .. (value - baseValue))
+    else
+      widget:setColor('#bbbbbb') -- default
+      skill:removeTooltip()
+    end
   end
 end
 
 function setSkillValue(id, value)
   local skill = skillsWindow:recursiveGetChildById(id)
-  local widget = skill:getChildById('value')
-  widget:setText(value)
+  if skill then
+    local widget = skill:getChildById('value')
+    widget:setText(value)
+  end
 end
 
 function setSkillColor(id, value)
   local skill = skillsWindow:recursiveGetChildById(id)
-  local widget = skill:getChildById('value')
-  widget:setColor(value)
+  if skill then
+    local widget = skill:getChildById('value')
+    widget:setColor(value)
+  end
 end
 
 function setSkillTooltip(id, value)
   local skill = skillsWindow:recursiveGetChildById(id)
-  local widget = skill:getChildById('value')
-  widget:setTooltip(value)
+  if skill then
+    local widget = skill:getChildById('value')
+    widget:setTooltip(value)
+  end
 end
 
 function setSkillPercent(id, percent, tooltip, color)
   local skill = skillsWindow:recursiveGetChildById(id)
-  local widget = skill:getChildById('percent')
-  if widget then
-    widget:setPercent(math.floor(percent))
-
-    if tooltip then
-      widget:setTooltip(tooltip)
-    end
-
-    if color then
-    	widget:setBackgroundColor(color)
+  if skill then
+    local widget = skill:getChildById('percent')
+    if widget then
+      widget:setPercent(math.floor(percent))
+      if tooltip then widget:setTooltip(tooltip) end
+      if color then widget:setBackgroundColor(color) end
     end
   end
 end
@@ -284,14 +290,14 @@ end
 function onExperienceChange(localPlayer, value)
   local postFix = ""
   if value > 1e15 then
-	postFix = "B"
-	value = math.floor(value / 1e9)
+    postFix = "B"
+    value = math.floor(value / 1e9)
   elseif value > 1e12 then
-	postFix = "M"
-	value = math.floor(value / 1e6)
+    postFix = "M"
+    value = math.floor(value / 1e6)
   elseif value > 1e9 then
-	postFix = "K"
-	value = math.floor(value / 1e3)
+    postFix = "K"
+    value = math.floor(value / 1e3)
   end
   setSkillValue('experience', comma_value(value) .. postFix)
 end
@@ -351,28 +357,28 @@ function onStaminaChange(localPlayer, stamina)
 
   --TODO not all client versions have premium time
   if stamina > 2400 and g_game.getClientVersion() >= 1038 and localPlayer:isPremium() then
-  	local text = tr("You have %s hours and %s minutes left", hours, minutes) .. '\n' ..
-		tr("Now you will gain 50%% more experience")
-		setSkillPercent('stamina', percent, text, 'green')
-	elseif stamina > 2400 and g_game.getClientVersion() >= 1038 and not localPlayer:isPremium() then
-		local text = tr("You have %s hours and %s minutes left", hours, minutes) .. '\n' ..
-		tr("You will not gain 50%% more experience because you aren't premium player, now you receive only 1x experience points")
-		setSkillPercent('stamina', percent, text, '#89F013')
-	elseif stamina > 2400 and g_game.getClientVersion() < 1038 then
-		local text = tr("You have %s hours and %s minutes left", hours, minutes) .. '\n' ..
-		tr("If you are premium player, you will gain 50%% more experience")
-		setSkillPercent('stamina', percent, text, 'green')
-	elseif stamina <= 2400 and stamina > 840 then
-		setSkillPercent('stamina', percent, tr("You have %s hours and %s minutes left", hours, minutes), 'orange')
-	elseif stamina <= 840 and stamina > 0 then
-		local text = tr("You have %s hours and %s minutes left", hours, minutes) .. "\n" ..
-		tr("You gain only 50%% experience and you don't may gain loot from monsters")
-		setSkillPercent('stamina', percent, text, 'red')
-	elseif stamina == 0 then
-		local text = tr("You have %s hours and %s minutes left", hours, minutes) .. "\n" ..
-		tr("You don't may receive experience and loot from monsters")
-		setSkillPercent('stamina', percent, text, 'black')
-	end
+    local text = tr("You have %s hours and %s minutes left", hours, minutes) .. '\n' ..
+      tr("Now you will gain 50%% more experience")
+    setSkillPercent('stamina', percent, text, 'green')
+  elseif stamina > 2400 and g_game.getClientVersion() >= 1038 and not localPlayer:isPremium() then
+    local text = tr("You have %s hours and %s minutes left", hours, minutes) .. '\n' ..
+      tr("You will not gain 50%% more experience because you aren't premium player, now you receive only 1x experience points")
+    setSkillPercent('stamina', percent, text, '#89F013')
+  elseif stamina > 2400 and g_game.getClientVersion() < 1038 then
+    local text = tr("You have %s hours and %s minutes left", hours, minutes) .. '\n' ..
+      tr("If you are premium player, you will gain 50%% more experience")
+    setSkillPercent('stamina', percent, text, 'green')
+  elseif stamina <= 2400 and stamina > 840 then
+    setSkillPercent('stamina', percent, tr("You have %s hours and %s minutes left", hours, minutes), 'orange')
+  elseif stamina <= 840 and stamina > 0 then
+    local text = tr("You have %s hours and %s minutes left", hours, minutes) .. "\n" ..
+      tr("You gain only 50%% experience and you don't may gain loot from monsters")
+    setSkillPercent('stamina', percent, text, 'red')
+  elseif stamina == 0 then
+    local text = tr("You have %s hours and %s minutes left", hours, minutes) .. "\n" ..
+      tr("You don't may receive experience and loot from monsters")
+    setSkillPercent('stamina', percent, text, 'black')
+  end
 end
 
 function onOfflineTrainingChange(localPlayer, offlineTrainingTime)
@@ -406,7 +412,6 @@ end
 
 function onSpeedChange(localPlayer, speed)
   setSkillValue('speed', speed)
-
   onBaseSpeedChange(localPlayer, localPlayer:getBaseSpeed())
 end
 
@@ -417,7 +422,6 @@ end
 function onMagicLevelChange(localPlayer, magiclevel, percent)
   setSkillValue('magiclevel', magiclevel)
   setSkillPercent('magiclevel', percent, tr('You have %s percent to go', 100 - percent))
-
   onBaseMagicLevelChange(localPlayer, localPlayer:getBaseMagicLevel())
 end
 
@@ -428,7 +432,6 @@ end
 function onSkillChange(localPlayer, id, level, percent)
   setSkillValue('skillId' .. id, level)
   setSkillPercent('skillId' .. id, percent, tr('You have %s percent to go', 100 - percent))
-
   onBaseSkillChange(localPlayer, id, localPlayer:getSkillBaseLevel(id))
 end
 
